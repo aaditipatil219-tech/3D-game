@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Game Center 3D</title>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;background:#080b18;color:#fff;overflow-x:hidden}
+header{padding:22px 6%;display:flex;align-items:center;justify-content:space-between;background:#101426;border-bottom:1px solid #252b46}
+.logo{font-size:25px;font-weight:900;color:#7c8cff}
+.logo span{color:#fff}
+header small{color:#aab1d0}
+.hero{text-align:center;padding:45px 15px 30px}
+.hero h1{font-size:clamp(30px,5vw,54px);margin-bottom:12px}
+.hero h1 span{color:#7c8cff}
+.hero p{color:#aab1d0}
+.games{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;padding:25px 6% 50px}
+.card{background:linear-gradient(145deg,#171d35,#101426);border:1px solid #303858;border-radius:18px;padding:22px;transition:.25s}
+.card:hover{transform:translateY(-5px);border-color:#7c8cff}
+.card .emoji{font-size:42px;margin-bottom:12px}
+.card h3{margin-bottom:8px}
+.card p{font-size:13px;color:#aab1d0;min-height:38px;line-height:1.5}
+button{border:0;border-radius:10px;background:#6878ff;color:white;padding:11px 17px;font-weight:bold;cursor:pointer}
+button:hover{background:#8793ff}
+.card button{width:100%;margin-top:17px}
+#gameArea{display:none;padding:25px 6% 50px}
+.gameTop{display:flex;justify-content:space-between;align-items:center;gap:15px;flex-wrap:wrap;margin-bottom:15px}
+.gameTop h2{font-size:25px}
+#gameInfo{color:#bdc5e6;font-size:14px;margin-bottom:12px}
+#gameCanvas{height: min(70vh,650px);min-height:400px;background:#111;position:relative;border-radius:18px;overflow:hidden;border:1px solid #343d60}
+#gameCanvas canvas{display:block;width:100%;height:100%}
+#overlay{position:absolute;top:15px;left:15px;z-index:2;background:#080b18cc;padding:10px 15px;border-radius:10px;color:#fff;font-size:14px;pointer-events:none}
+#message{margin-top:12px;color:#cbd2f4;min-height:22px}
+footer{text-align:center;padding:25px;color:#7f88ad;border-top:1px solid #252b46}
+@media(max-width:600px){header{padding:18px 5%}.games{padding:20px 5%}#gameArea{padding:20px 5%}#gameCanvas{min-height:360px}}
+</style>
+</head>
+
+<body>
+<header>
+  <div class="logo">🎮 GAME<span> CENTER</span></div>
+  <small>3D Gaming Universe</small>
+</header>
+
+<section class="hero">
+  <h1>Enter Your <span>Gaming World</span></h1>
+  <p>Choose a game, explore its world, and start playing.</p>
+</section>
+
+<section class="games" id="gameCards">
+  <div class="card">
+    <div class="emoji">🏎️</div><h3>3D Car Racing</h3>
+    <p>Race on a road, dodge traffic, and collect points.</p>
+    <button onclick="startGame('car')">Play Car Racing</button>
+  </div>
+  <div class="card">
+    <div class="emoji">🏍️</div><h3>3D Bike Racing</h3>
+    <p>Ride a motorcycle through a scenic racing track.</p>
+    <button onclick="startGame('bike')">Play Bike Racing</button>
+  </div>
+  <div class="card">
+    <div class="emoji">♟️</div><h3>3D Chess</h3>
+    <p>Play chess with recognizable pieces and legal moves.</p>
+    <button onclick="startGame('chess')">Play Chess</button>
+  </div>
+  <div class="card">
+    <div class="emoji">⚽</div><h3>Football Penalty</h3>
+    <p>Aim and shoot at the goal. Try to score!</p>
+    <button onclick="startGame('football')">Play Football</button>
+  </div>
+  <div class="card">
+    <div class="emoji">🧩</div><h3>3D Sliding Puzzle</h3>
+    <p>Slide the tiles into the correct numbered order.</p>
+    <button onclick="startGame('puzzle')">Play Puzzle</button>
+  </div>
+  <div class="card">
+    <div class="emoji">🏃</div><h3>Adventure Runner</h3>
+    <p>Run through a jungle, avoid obstacles, and collect coins.</p>
+    <button onclick="startGame('adventure')">Play Adventure</button>
+  </div>
+  <div class="card">
+    <div class="emoji">🎯</div><h3>Target Shooter</h3>
+    <p>Click the targets in a sci-fi shooting range.</p>
+    <button onclick="startGame('action')">Play Target Shooter</button>
+  </div>
+</section>
+
+<section id="gameArea">
+  <div class="gameTop">
+    <h2 id="gameTitle">Game</h2>
+    <div>
+      <button onclick="restartGame()">Restart</button>
+      <button onclick="exitGame()" style="background:#303854">Exit Game</button>
+    </div>
+  </div>
+  <div id="gameInfo">Controls</div>
+  <div id="gameCanvas">
+    <div id="overlay">Score: <span id="score">0</span></div>
+  </div>
+  <div id="message"></div>
+</section>
+
+<footer>Game Center 3D · Built with Django, HTML, CSS and Three.js</footer>
+
+<script type="module">
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+import { Chess } from "https://cdn.jsdelivr.net/npm/chess.js@1.0.0/dist/esm/chess.js";
+
+const container = document.getElementById("gameCanvas");
+const scoreElement = document.getElementById("score");
+const messageElement = document.getElementById("message");
+const infoElement = document.getElementById("gameInfo");
+const titleElement = document.getElementById("gameTitle");
+
+let renderer, scene, camera, clock, currentGame = "";
+let animationId = null;
+let score = 0;
+let gameObjects = [];
+let keys = {};
+let raycaster = new THREE.Raycaster();
+let mouse = new THREE.Vector2();
+let selectedSquare = null;
+let chessGame = null;
+let chessPieces = [];
+let puzzleTiles = [];
+let puzzleEmpty = 15;
+let gameState = {};
+
+const titles = {
+  car:"🏎️ 3D Car Racing",
+  bike:"🏍️ 3D Bike Racing",
+  chess:"♟️ 3D Chess",
+  football:"⚽ Football Penalty",
+  puzzle:"🧩 3D Sliding Puzzle",
+  adventure:"🏃 Jungle Adventure",
+  action:"🎯 Target Shooter"
+};
+
+const instructions = {
+  car:"Controls: ← → or A/D to steer. Avoid obstacles.",
+  bike:"Controls: ← → or A/D to steer your motorcycle.",
+  chess:"Click a piece, then click a legal destination. White moves first.",
+  football:"Click the ball, then click inside the goal to shoot.",
+  puzzle:"Click a tile next to the empty space to slide it.",
+  adventure:"Controls: ← → to change lanes. Avoid obstacles and collect coins.",
+  action:"Click the targets to shoot them. Try to get a high score!"
+};
+
+function setScore(value){
+  score = value;
+  scoreElement.textContent = score;
+}
+
+function addScore(value=1){
+  setScore(score + value);
+}
+
+function say(text){
+  messageElement.textContent = text;
+}
+
+function addObject(obj){
+  scene.add(obj);
+  gameObjects.push(obj);
+  return obj;
+}
+
+function material(color, roughness=.7, metalness=0){
+  return new THREE.MeshStandardMaterial({color,roughness,metalness});
+}
+
+function box(w,h,d,color,x=0,y=0,z=0){
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(w,h,d),
+    material(color)
+  );
+  mesh.position.set(x,y,z);
+  return mesh;
+}
+
+function sphere(radius,color,x=0,y=0,z=0){
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(radius,24,16),
+    material(color)
+  );
+  mesh.position.set(x,y,z);
+  return mesh;
+}
+
+function cylinder(radiusTop,radiusBottom,height,color,x=0,y=0,z=0){
+  const mesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(radiusTop,radiusBottom,height,24),
+    material(color)
+  );
+  mesh.position.set(x,y,z);
+  return mesh;
+}
+
+function addLights(){
+  scene.add(new THREE.HemisphereLight(0xffffff,0x445066,2));
+  const light = new THREE.DirectionalLight(0xffffff,2.5);
+  light.position.set(8,14,8);
+  scene.add(light);
+}
+
+function setupScene(background){
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(background);
+  clock = new THREE.Clock();
+
+  camera = new THREE.PerspectiveCamera(
+    60,
+    container.clientWidth/container.clientHeight,
+    .1,
+    1000
+  );
+
+  renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  renderer.setSize(container.clientWidth,container.clientHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  container.querySelectorAll("canvas").forEach(c=>c.remove());
+  container.appendChild(renderer.domElement);
+
+  addLights();
+}
+
+function clearScene(){
+  if(animationId) cancelAnimationFrame(animationId);
+
+  if(renderer){
+    renderer.dispose();
+    renderer.domElement.remove();
+  }
+
+  scene = null;
+  renderer = null;
+  gameObjects = [];
+  chessPieces = [];
+  puzzleTiles = [];
+  selectedSquare = null;
+  gameState = {};
+  keys = {};
+}
+
+function floor(color,size=100){
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(size,size),
+    material(color)
+  );
+  mesh.rotation.x = -Math.PI/2;
+  mesh.position.y = -.05;
+  mesh.receiveShadow = true;
+  addObject(mesh);
+  return mesh;
+}
+
+function createTree(x,z){
+  const trunk = cylinder(.25,.35,2.2,0x68432b,x,1.1,z);
+  const leaves = sphere(1.1,0x16703a,x,2.6,z);
+  addObject(trunk);
+  addObject(leaves);
+}
+
+function createRoad(){
+  floor(0x24512b,150);
+  addObject(box(10,.1,150,0x292b32,0,.02,0));
+
+  for(let z=-70;z<70;z+=8){
+    addObject(box(.15,.05,3,0xffffff,-2.5,.1,z));
+    addObject(box(.15,.05,3,0xffffff,2.5,.1,z));
+  }
+
+  for(let z=-65;z<65;z+=10){
+    addObject(box(.3,.8,2,0xff3b4f,-5,.4,z));
+    addObject(box(.3,.8,2,0xff3b4f,5,.4,z));
+    createTree(-8,z);
+    createTree(8,z);
+  }
+}
+
+function createCar(){
+  const car = new THREE.Group();
+
+  const body = box(1.6,.55,2.6,0xe52e42,0,.6,0);
+  const cabin = box(1.1,.65,1.25,0x85d5ff,0,1.15,-.1);
+  car.add(body,cabin);
+
+  for(const x of [-.85,.85]){
+    for(const z of [-.8,.8]){
+      const wheel = cylinder(.35,.35,.25,0x111111,x,.35,z);
+      wheel.rotation.z = Math.PI/2;
+      car.add(wheel);
+    }
+  }
+
+  car.position.set(0,0,4);
+  addObject(car);
+  gameState.player = car;
+}
+
+function createBike(){
+  const bike = new THREE.Group();
+
+  // Two distinct motorcycle wheels.
+  const wheelMaterial = material(0x111111);
+  const rimMaterial = material(0xbec8d6,.25,.6);
+
+  function makeWheel(z){
+    const wheel = new THREE.Mesh(
+      new THREE.TorusGeometry(.48,.13,14,28),
+      wheelMaterial
+    );
+    wheel.rotation.y = Math.PI/2;
+    wheel.position.set(0,.55,z);
+    bike.add(wheel);
+
+    const rim = new THREE.Mesh(
+      new THREE.TorusGeometry(.27,.045,10,24),
+      rimMaterial
+    );
+    rim.rotation.y = Math.PI/2;
+    rim.position.set(0,.55,z);
+    bike.add(rim);
+
+    bike.add(cylinder(.07,.07,.35,0x999999,0,.55,z));
+  }
+
+  makeWheel(-1.15);
+  makeWheel(1.15);
+
+  // Motorcycle frame and engine.
+  bike.add(box(.18,.18,1.8,0x444b55,0,.75,0));
+  bike.add(sphere(.4,0x777f89,0,.65,0));
+  bike.add(box(.65,.2,.75,0xe63946,0,1.15,.15));
+  bike.add(box(.55,.15,.65,0x171b24,0,1.35,-.45));
+
+  // Front fork and handlebars.
+  bike.add(box(.12,.9,.12,0xc0c7d0,0,1.05,1.05));
+  bike.add(box(1,.1,.12,0x222222,0,1.55,1.2));
+  bike.add(sphere(.15,0x222222,0,1.55,1.2));
+
+  // Rider.
+  bike.add(sphere(.3,0x202a44,0,1.75,-.1));
+  bike.add(box(.45,.7,.35,0x3159a5,0,1.4,-.15));
+  bike.add(sphere(.23,0xffd1a3,0,2.15,.1));
+  bike.add(sphere(.26,0x151515,0,2.3,.1));
+
+  bike.position.set(0,0,4);
+  addObject(bike);
+  gameState.player = bike;
+}
+
+function spawnTraffic(){
+  const group = new THREE.Group();
+  const car = box(1.5,.6,2,0xffc83d);
+  car.position.y=.6;
+  group.add(car);
+  group.position.set((Math.floor(Math.random()*3)-1)*2.4,0,-35);
+  addObject(group);
+  gameState.obstacles.push(group);
+}
+
+function setupRace(type){
+  createRoad();
+  if(type==="car") createCar();
+  else createBike();
+
+  gameState.obstacles = [];
+  gameState.spawnTimer = 0;
+  gameState.speed = 15;
+  camera.position.set(0,6,11);
+  camera.lookAt(0,1,0);
+}
+
+function setupChess(){
+  scene.background = new THREE.Color(0x16213b);
+  floor(0x26324d,50);
+
+  // Chess room floor and board.
+  const board = new THREE.Group();
+  for(let rank=0;rank<8;rank++){
+    for(let file=0;file<8;file++){
+      const color=(rank+file)%2===0?0xf0dfbd:0x76533d;
+      const square=box(1,.18,1,color,file-3.5,.1,rank-3.5);
+      square.userData.square=String.fromCharCode(97+file)+(rank+1);
+      board.add(square);
+    }
+  }
+  addObject(board);
+  gameState.board=board;
+
+  chessGame = new Chess();
+  renderChessPieces();
+
+  camera.position.set(0,9,9);
+  camera.lookAt(0,0,0);
+}
+
+function createChessPiece(type,color){
+  const group=new THREE.Group();
+  const c=color==="w"?0xf4eee2:0x202633;
+  const base=material(c,.3,.25);
+  const accent=material(color==="w"?0xc4b69d:0x667080,.25,.4);
+
+  group.add(cylinder(.32,.4,.16,c,0,.15,0));
+  group.add(cylinder(.25,.3,.18,c,0,.3,0));
+
+  if(type==="p"){
+    group.add(cylinder(.15,.22,.25,c,0,.48,0));
+    group.add(sphere(.19,c,0,.68,0));
+  }else if(type==="r"){
+    group.add(cylinder(.2,.25,.55,c,0,.62,0));
+    group.add(cylinder(.34,.25,.12,c,0,.95,0));
+    for(let i=0;i<4;i++){
+      const crenel=box(.12,.18,.12,c,(i%2?-.2:.2),1.1,(i<2?-.2:.2));
+      group.add(crenel);
+    }
+  }else if(type==="n"){
+    group.add(cylinder(.2,.28,.35,c,0,.48,0));
+    const neck=box(.3,.45,.2,c,0,.82,0);
+    neck.rotation.z=-.25;
+    group.add(neck);
+    const head=sphere(.24,c,0,1.05,.08);
+    head.scale.set(.8,1.2,1);
+    group.add(head);
+    group.add(sphere(.06,color==="w"?0x222222:0xffffff,.12,1.1,.25));
+  }else if(type==="b"){
+    group.add(cylinder(.18,.27,.45,c,0,.5,0));
+    group.add(sphere(.27,c,0,.85,0));
+    group.add(cylinder(.09,.12,.3,c,0,1.05,0));
+    group.add(sphere(.12,c,0,1.23,0));
+  }else if(type==="q"||type==="k"){
+    group.add(cylinder(.2,.3,.6,c,0,.55,0));
+    group.add(cylinder(.3,.2,.15,c,0,.9,0));
+    group.add(sphere(.24,c,0,1.12,0));
+    for(let i=0;i<5;i++){
+      const a=i*Math.PI*2/5;
+      group.add(sphere(.09,c,Math.cos(a)*.25,1.25,Math.sin(a)*.25));
+    }
+    if(type==="k"){
+      group.add(box(.1,.42,c,0,0,1.48,0));
+      group.add(box(.35,.1,.1,c,0,1.55,0));
+    }
+  }
+
+  group.userData.type=type;
+  group.userData.color=color;
+  return group;
+}
+
+function renderChessPieces(){
+  chessPieces.forEach(p=>scene.remove(p));
+  chessPieces=[];
+
+  const board=chessGame.board();
+
+  for(let rank=0;rank<8;rank++){
+    for(let file=0;file<8;file++){
+      const piece=board[rank][file];
+      if(!piece) continue;
+
+      const square=String.fromCharCode(97+file)+(8-rank);
+      const model=createChessPiece(piece.type,piece.color);
+      model.position.set(file-3.5,.2,rank-3.5);
+      model.userData.square=square;
+
+      scene.add(model);
+      chessPieces.push(model);
+    }
+  }
+}
+
+function chessSquareFromPoint(point){
+  const file=Math.round(point.x+3.5);
+  const rank=Math.round(point.z+3.5);
+  if(file<0||file>7||rank<0||rank>7)return null;
+  return String.fromCharCode(97+file)+(8-rank);
+}
+
+function chessClick(event){
+  const rect=renderer.domElement.getBoundingClientRect();
+  mouse.x=((event.clientX-rect.left)/rect.width)*2-1;
+  mouse.y=-((event.clientY-rect.top)/rect.height)*2+1;
+  raycaster.setFromCamera(mouse,camera);
+
+  const hits=raycaster.intersectObjects(chessPieces,true);
+  let square=null;
+
+  if(hits.length){
+    let obj=hits[0].object;
+    while(obj && !obj.userData.square)obj=obj.parent;
+    if(obj)square=obj.userData.square;
+  }
+
+  if(!square){
+    const boardHits=raycaster.intersectObjects(gameObjects,true);
+    if(boardHits.length){
+      const p=boardHits[0].point;
+      square=chessSquareFromPoint(p);
+    }
+  }
+
+  if(!square)return;
+
+  if(!selectedSquare){
+    const piece=chessGame.get(square);
+    if(piece && piece.color===chessGame.turn()){
+      selectedSquare=square;
+      say("Selected "+square+". Choose a destination.");
+    }
+    return;
+  }
+
+  try{
+    const move=chessGame.move({
+      from:selectedSquare,
+      to:square,
+      promotion:"q"
+    });
+
+    if(move){
+      selectedSquare=null;
+      renderChessPieces();
+      addScore(1);
+      say(chessGame.isGameOver()?"Game over!":"Move played.");
+    }else{
+      const piece=chessGame.get(square);
+      selectedSquare=piece&&piece.color===chessGame.turn()?square:null;
+      say("That is not a legal move.");
+    }
+  }catch{
+    selectedSquare=null;
+    say("Invalid move.");
+  }
+}
+
+function setupPuzzle(){
+  scene.background=new THREE.Color(0x321b52);
+  floor(0x47245f,60);
+
+  // Puzzle room: decorative walls and colored lights.
+  addObject(box(24,12,.5,0x25133e,0,6,-8));
+  addObject(box(.5,12,24,0x2d1948,-8,6,0));
+  addObject(box(.5,12,24,0x2d1948,8,6,0));
+
+  const board=new THREE.Group();
+  const colors=[0x43d9ff,0xa855f7,0xf472b6,0x4ade80];
+
+  puzzleTiles=[];
+  const nums=[...Array(15)].map((_,i)=>i+1).concat(0);
+  shuffle(nums);
+  puzzleEmpty=nums.indexOf(0);
+
+  nums.forEach((num,i)=>{
+    if(num===0)return;
+    const x=i%4;
+    const z=Math.floor(i/4);
+    const tile=box(1.65,.25,1.65,colors[(num-1)%4],x-1.5,.25,z-1.5);
+    tile.userData.index=i;
+    tile.userData.number=num;
+    board.add(tile);
+
+    const label=new THREE.Mesh(
+      new THREE.PlaneGeometry(1.1,1.1),
+      new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.DoubleSide})
+    );
+    label.rotation.x=-Math.PI/2;
+    label.position.set(x-1.5,.4,z-1.5);
+    board.add(label);
+
+    puzzleTiles.push(tile);
+  });
+
+  addObject(board);
+  gameState.puzzleBoard=board;
+  gameState.puzzleNumbers=nums;
+
+  camera.position.set(0,8,7);
+  camera.lookAt(0,0,0);
+}
+
+function shuffle(arr){
+  for(let i=arr.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]]=[arr[j],arr[i]];
+  }
+}
+
+function puzzleClick(event){
+  const rect=renderer.domElement.getBoundingClientRect();
+  mouse.x=((event.clientX-rect.left)/rect.width)*2-1;
+  mouse.y=-((event.clientY-rect.top)/rect.height)*2+1;
+  raycaster.setFromCamera(mouse,camera);
+
+  const hits=raycaster.intersectObjects(puzzleTiles,true);
+  if(!hits.length)return;
+
+  let tile=hits[0].object;
+  while(tile && tile.userData.index===undefined)tile=tile.parent;
+  if(!tile)return;
+
+  const index=tile.userData.index;
+  const empty=puzzleEmpty;
+
+  const adjacent=
+    (Math.abs(index%4-empty%4)+Math.abs(Math.floor(index/4)-Math.floor(empty/4)))===1;
+
+  if(!adjacent){
+    say("Move a tile next to the empty space.");
+    return;
+  }
+
+  const numbers=gameState.puzzleNumbers;
+  numbers[empty]=numbers[index];
+  numbers[index]=0;
+  puzzleEmpty=index;
+
+  rebuildPuzzle();
+  addScore(1);
+
+  if(numbers.every((n,i)=>n===i+1 || (i===15&&n===0))){
+    say("Puzzle solved! Great job!");
+  }else{
+    say("Tile moved.");
+  }
+}
+
+function rebuildPuzzle(){
+  gameState.puzzleBoard.clear();
+  puzzleTiles=[];
+
+  const colors=[0x43d9ff,0xa855f7,0xf472b6,0x4ade80];
+  gameState.puzzleNumbers.forEach((num,i)=>{
+    if(num===0)return;
+    const x=i%4,z=Math.floor(i/4);
+    const tile=box(1.65,.25,1.65,colors[(num-1)%4],x-1.5,.25,z-1.5);
+    tile.userData.index=i;
+    tile.userData.number=num;
+    gameState.puzzleBoard.add(tile);
+    puzzleTiles.push(tile);
+  });
+}
+
+function setupFootball(){
+  scene.background=new THREE.Color(0x7ec9ff);
+  floor(0x1b8b43,100);
+
+  // Stadium pitch.
+  addObject(box(24,.08,38,0x238b45,0,.02,0));
+  for(let z=-16;z<=16;z+=4){
+    addObject(box(24,.03,2,0x2b9c4c,0,.08,z));
+  }
+
+  // White pitch markings.
+  const lineMat=material(0xffffff);
+  const line1=box(24,.05,.12,0xffffff,0,.12,0);
+  const line2=box(.12,.05,38,0xffffff,0,.12,0);
+  addObject(line1);addObject(line2);
+
+  // Goal frame.
+  addObject(box(7,.25,.25,0xffffff,0,3,-17));
+  addObject(box(.25,3,.25,0xffffff,-3.5,1.5,-17));
+  addObject(box(.25,3,.25,0xffffff,3.5,1.5,-17));
+  addObject(box(7,.1,.15,0xffffff,0,0,-17));
+
+  // Crowd stands.
+  addObject(box(28,5,3,0x334155,0,3,-21));
+  addObject(box(28,5,3,0x334155,0,3,21));
+
+  const ball=sphere(.45,0xffffff,0,.45,10);
+  addObject(ball);
+  gameState.ball=ball;
+  gameState.kicked=false;
+  gameState.shots=0;
+
+  camera.position.set(0,6,17);
+  camera.lookAt(0,1,-10);
+}
+
+function footballClick(event){
+  if(gameState.kicked)return;
+
+  const rect=renderer.domElement.getBoundingClientRect();
+  mouse.x=((event.clientX-rect.left)/rect.width)*2-1;
+  mouse.y=-((event.clientY-rect.top)/rect.height)*2+1;
+  raycaster.setFromCamera(mouse,camera);
+
+  const hits=raycaster.intersectObjects(gameObjects,true);
+  if(!hits.length)return;
+
+  const point=hits[0].point;
+
+  if(point.z < -13 && Math.abs(point.x)<4){
+    gameState.kicked=true;
+    gameState.ballVelocity=new THREE.Vector3(
+      (point.x/4)*.14,
+      .16,
+      -.42
+    );
+    say("Shot taken!");
+  }else{
+    say("Aim inside the goal area to shoot.");
+  }
+}
+
+function setupAdventure(){
+  scene.background=new THREE.Color(0x83c8ff);
+  floor(0x226b34,150);
+
+  // Jungle environment.
+  for(let z=-70;z<70;z+=8){
+    createTree(-7,z);
+    createTree(7,z);
+    createTree(-10,z+3);
+    createTree(10,z+3);
+  }
+
+  // Three running lanes.
+  addObject(box(8,.08,150,0x8b6544,0,.05,0));
+  for(let x=-4;x<=4;x+=4){
+    addObject(box(.08,.1,150,0xf0d8a2,x,.1,0));
+  }
+
+  const runner=new THREE.Group();
+  runner.add(sphere(.28,0xffd1a3,0,1.5,0));
+  runner.add(box(.45,.7,.3,0x2563eb,0,.95,0));
+  runner.add(box(.18,.6,.18,0x111827,-.2,.35,.1));
+  runner.add(box(.18,.6,.18,0x111827,.2,.35,.1));
+  runner.position.set(0,0,5);
+  addObject(runner);
+
+  gameState.player=runner;
+  gameState.lane=1;
+  gameState.spawnTimer=0;
+  gameState.obstacles=[];
+  gameState.speed=15;
+
+  camera.position.set(0,5,12);
+  camera.lookAt(0,1,0);
+}
+
+function spawnAdventureObject(){
+  const isCoin=Math.random()>.55;
+  const obj=isCoin?sphere(.35,0xffd700):box(1,1.2,1,0xe34b4b);
+  obj.position.set((Math.floor(Math.random()*3)-1)*4,.6,-45);
+  addObject(obj);
+  gameState.obstacles.push({obj,isCoin});
+}
+
+function setupAction(){
+  scene.background=new THREE.Color(0x090f2c);
+  floor(0x171e3d,100);
+
+  // Futuristic shooting gallery.
+  addObject(box(30,12,.5,0x222e58,0,6,-18));
+  for(let x=-12;x<=12;x+=4){
+    addObject(box(.15,10,.15,0x4c5d9b,x,5,-17));
+  }
+
+  gameState.targets=[];
+  for(let i=0;i<6;i++){
+    const target=new THREE.Group();
+    target.add(cylinder(.8,.8,.18,0x39466b,0,0,0));
+    target.add(sphere(.55,0xff3c71,0,.15,0));
+    target.position.set((i%3-1)*5,2+Math.floor(i/3)*3,-10);
+    addObject(target);
+    gameState.targets.push(target);
+  }
+
+  camera.position.set(0,5,14);
+  camera.lookAt(0,3,-10);
+}
+
+function actionClick(event){
+  const rect=renderer.domElement.getBoundingClientRect();
+  mouse.x=((event.clientX-rect.left)/rect.width)*2-1;
+  mouse.y=-((event.clientY-rect.top)/rect.height)*2+1;
+  raycaster.setFromCamera(mouse,camera);
+
+  const hits=raycaster.intersectObjects(gameState.targets,true);
+  if(!hits.length){
+    say("Aim at a target.");
+    return;
+  }
+
+  let target=hits[0].object;
+  while(target && !gameState.targets.includes(target))target=target.parent;
+  if(!target)return;
+
+  scene.remove(target);
+  gameState.targets=gameState.targets.filter(t=>t!==target);
+  addScore(10);
+  say("Target hit! +10 points");
+
+  if(gameState.targets.length===0){
+    say("All targets cleared! Restart to play again.");
+  }
+}
+
+function startGame(type){
+  clearScene();
+  currentGame=type;
+  setScore(0);
+  say("");
+
+  document.getElementById("gameCards").style.display="none";
+  document.getElementById("gameArea").style.display="block";
+  titleElement.textContent=titles[type];
+  infoElement.textContent=instructions[type];
+
+  setupScene(
+    type==="chess"?"#16213b":
+    type==="puzzle"?"#321b52":
+    type==="football"?"#7ec9ff":
+    type==="adventure"?"#83c8ff":
+    type==="action"?"#090f2c":"#8bcfff"
+  );
+
+  if(type==="car"||type==="bike")setupRace(type);
+  if(type==="chess")setupChess();
+  if(type==="football")setupFootball();
+  if(type==="puzzle")setupPuzzle();
+  if(type==="adventure")setupAdventure();
+  if(type==="action")setupAction();
+
+  renderer.domElement.addEventListener("click",handleGameClick);
+  animate();
+}
+
+function handleGameClick(event){
+  if(currentGame==="chess")chessClick(event);
+  if(currentGame==="puzzle")puzzleClick(event);
+  if(currentGame==="football")footballClick(event);
+  if(currentGame==="action")actionClick(event);
+}
+
+function restartGame(){
+  if(currentGame)startGame(currentGame);
+}
+
+function exitGame(){
+  clearScene();
+  currentGame="";
+  document.getElementById("gameArea").style.display="none";
+  document.getElementById("gameCards").style.display="grid";
+}
+
+window.startGame=startGame;
+window.restartGame=restartGame;
+window.exitGame=exitGame;
+
+window.addEventListener("keydown",e=>{
+  keys[e.key.toLowerCase()]=true;
+});
+window.addEventListener("keyup",e=>{
+  keys[e.key.toLowerCase()]=false;
+});
+
+window.addEventListener("resize",()=>{
+  if(!renderer||!camera)return;
+  camera.aspect=container.clientWidth/container.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(container.clientWidth,container.clientHeight);
+});
+
+function updateRace(delta){
+  const player=gameState.player;
+  const left=keys["arrowleft"]||keys["a"];
+  const right=keys["arrowright"]||keys["d"];
+
+  if(left)player.position.x-=7*delta;
+  if(right)player.position.x+=7*delta;
+  player.position.x=Math.max(-3.8,Math.min(3.8,player.position.x));
+
+  gameState.spawnTimer+=delta;
+  if(gameState.spawnTimer>1.2){
+    spawnTraffic();
+    gameState.spawnTimer=0;
+  }
+
+  gameState.obstacles.forEach((obstacle,index)=>{
+    obstacle.position.z+=gameState.speed*delta;
+    if(obstacle.position.z>12){
+      scene.remove(obstacle);
+      gameState.obstacles.splice(index,1);
+      addScore(1);
+    }
+
+    if(Math.abs(obstacle.position.x-player.position.x)<1.5 &&
+       Math.abs(obstacle.position.z-player.position.z)<2){
+      say("Crash! Press Restart to race again.");
+      gameState.speed=0;
+    }
+  });
+
+  camera.position.x+=(player.position.x-camera.position.x)*delta*3;
+  camera.lookAt(player.position.x,1,0);
+}
+
+function updateAdventure(delta){
+  const player=gameState.player;
+
+  if(keys["arrowleft"]||keys["a"]){
+    gameState.lane=Math.max(0,gameState.lane-1);
+    keys["arrowleft"]=false;keys["a"]=false;
+  }
+  if(keys["arrowright"]||keys["d"]){
+    gameState.lane=Math.min(2,gameState.lane+1);
+    keys["arrowright"]=false;keys["d"]=false;
+  }
+
+  player.position.x+=(gameState.lane-1)*4-player.position.x;
+  player.position.x*=Math.max(0,1-delta*4);
+
+  gameState.spawnTimer+=delta;
+  if(gameState.spawnTimer>1.1){
+    spawnAdventureObject();
+    gameState.spawnTimer=0;
+  }
+
+  gameState.obstacles.forEach((item,index)=>{
+    item.obj.position.z+=gameState.speed*delta;
+
+    if(item.obj.position.z>10){
+      scene.remove(item.obj);
+      gameState.obstacles.splice(index,1);
+      if(item.isCoin)addScore(5);
+    }
+
+    if(Math.abs(item.obj.position.x-player.position.x)<1.3 &&
+       Math.abs(item.obj.position.z-player.position.z)<1.5){
+      if(item.isCoin){
+        addScore(5);
+        scene.remove(item.obj);
+        gameState.obstacles.splice(index,1);
+      }else{
+        say("You hit an obstacle! Restart to try again.");
+        gameState.speed=0;
+      }
+    }
+  });
+
+  camera.position.x+=(player.position.x-camera.position.x)*delta*2;
+  camera.lookAt(player.position.x,1,0);
+}
+
+function updateFootball(delta){
+  if(!gameState.kicked)return;
+
+  const ball=gameState.ball;
+  ball.position.addScaledVector(gameState.ballVelocity,delta*60);
+  gameState.ballVelocity.y-=.008*delta*60;
+
+  if(ball.position.z<-17){
+    if(Math.abs(ball.position.x)<3.5 && ball.position.y<3){
+      addScore(1);
+      say("GOAL! You scored!");
+    }else{
+      say("Missed! Try another shot.");
+    }
+    gameState.kicked=false;
+    ball.position.set(0,.45,10);
+  }
+}
+
+function updatePuzzle(){
+  // Puzzle movement is handled by clicks.
+}
+
+function updateAction(){
+  // Target shooting is handled by clicks.
+}
+
+function animate(){
+  if(!renderer||!scene)return;
+
+  animationId=requestAnimationFrame(animate);
+  const delta=Math.min(clock.getDelta(),.05);
+
+  if(currentGame==="car"||currentGame==="bike")updateRace(delta);
+  if(currentGame==="adventure")updateAdventure(delta);
+  if(currentGame==="football")updateFootball(delta);
+  if(currentGame==="puzzle")updatePuzzle();
+  if(currentGame==="action")updateAction();
+
+  renderer.render(scene,camera);
+}
+</script>
+</body>
+</html>
